@@ -15,11 +15,14 @@ root.title("PTCGBuilder")
 
 class Card:
 
-	def __init__(self,name,set,number,imageURL):
+	def __init__(self,name,set,number,imageURL,isEX=False,isBreak=False,isMega=False):
 		self.name = name
 		self.set = set
 		self.number = number
 		self.imageURL = imageURL
+		self.isEX = isEX
+		self.isBreak = isBreak
+		self.isMega = isMega
 
 	def getCardImage(self):
 		img = BytesIO(urllib.request.urlopen(self.imageURL).read())
@@ -41,6 +44,8 @@ class CardDisplay:
 	def __init__(self,card,num):
 		self.card = card
 		i = card.getCardImage()
+		if card.isBreak:
+			i.thumbnail((245,245),Image.ANTIALIAS)
 		itk = ImageTk.PhotoImage(i)
 		self.root = Frame(cardFrame)
 		pic = Label(self.root, image=itk)
@@ -82,7 +87,8 @@ def searchForCardsByName(n):
 	global cardFrame
 	root.title("PTCGBuilder - Searching")
 	cardFrame.destroy()
-	scrollbarProxy.configure(height=740)
+	#scrollbarProxy.configure(height=740)
+	scrollbarProxy.configure(height=370)
 	columnsEntryValidate()
 	scrollbarProxy.configure(width=int(columnsEntry.get())*250+8)
 	cardFrame = Frame(scrollbarProxy)
@@ -187,20 +193,16 @@ def parseCardPage(rawCardList,pagenum=0):
 		num = page[-2]
 		name = data.split('alt="')[1].split('">')[0].replace("-", " ")
 		image = "http:" + data.split('<img src="')[1].split('"')[0]
-		c = Card(name, set, num, image)
+		if name[-6:].upper() == " BREAK":
+			c = Card(name, set, num, image,False,True)
+		elif name[:2].upper() == "M ":
+			c = Card(name, set, num, image,False,False,True)
+		elif name[-3:].upper() == " EX":
+			c = Card(name, set, num, image,True)
+		else:
+			c = Card(name, set, num, image)
 		found.append(CardDisplay(c,i+(pagenum*12)))
 	return found
-
-def buildCardDisplay(c):
-	i = c.getCardImage()
-	itk = ImageTk.PhotoImage(i)
-	r = Frame(cardFrame)
-	pic = Label(r, image=itk)
-	pic.image = itk
-	pic.pack()
-	name = Label(r,text=c.formatPretty())
-	name.pack()
-	return r
 
 
 def deleteOneWord(entry):
