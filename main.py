@@ -61,7 +61,15 @@ def searchForCardsByName(n):
 	elif n[-3:].upper() == " EX":
 		extra += isEX
 		n = n[:-3]
-	r = opener.open(baseurl.format(name=n)+extra).read().decode()
+	try:
+		r = opener.open(baseurl.format(name=n)+extra).read().decode()
+	except urllib.error.URLError:
+		eFrame = Frame(cardFrame)
+		eL = Label(eFrame,text="No Internet/Pokemon.com is blocked")
+		eL.pack()
+		eFrame.pack()
+		return
+
 	if '<div class="no-results' in r:
 		eFrame = Frame(cardFrame)
 		eL = Label(eFrame,text="No Pokemon found")
