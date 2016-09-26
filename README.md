@@ -16,6 +16,5 @@ A Pokemon TCG Deck Builder, built in Python!
 ###Current issues:
 
 * No deck building.
-* If there is more than 12 cards meeting criteria, only 12 are shown.
 
 Feel free to suggest features in the [Issues](https://github.com/Hydrox6/PTCGBuilder/issues) tab.
