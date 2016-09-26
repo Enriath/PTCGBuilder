@@ -2,44 +2,77 @@ import urllib.request
 from tkinter import *
 from PIL import Image, ImageTk
 from io import BytesIO
+import sys
+import re
+import time
+
+import external
 
 root = Tk()
 root.title("PTCGBuilder")
 #root.geometry("758x800")
 
+
 class Card:
 
-	def __init__(self,name,set,number,image):
+	def __init__(self,name,set,number,imageURL):
 		self.name = name
 		self.set = set
 		self.number = number
-		self.image = image
+		self.imageURL = imageURL
+
+	def getCardImage(self):
+		img = BytesIO(urllib.request.urlopen(self.imageURL).read())
+		i = Image.open(img)
+		return i
 
 	def getPrettySet(self):
-		return sets[self.set]
+		try:
+			return sets[self.set]
+		except KeyError:
+			return self.set
 
 	def formatPretty(self):
 		return self.name+", "+self.getPrettySet()+" #"+self.number
 
-baseurl = "http://www.pokemon.com/uk/pokemon-tcg/pokemon-cards/?cardName={name}&format=modified-legal"
+
+class CardDisplay:
+
+	def __init__(self,card,num):
+		self.card = card
+		i = card.getCardImage()
+		itk = ImageTk.PhotoImage(i)
+		self.root = Frame(cardFrame)
+		pic = Label(self.root, image=itk)
+		pic.image = itk
+		pic.pack()
+		name = Label(self.root, text=card.formatPretty())
+		name.pack()
+		self.num = num
+	def display(self):
+		self.root.grid(row=self.num // int(columnsEntry.get()), column=self.num % int(columnsEntry.get()))
+
+baseurl = "http://www.pokemon.com/uk/pokemon-tcg/pokemon-cards/{pagenum}?cardName={name}&format=modified-legal"
 isEX = "&ex-pokemon=on"
 isMega = "&mega-ex=on"
 isBreak = "&break=on"
 
-sets = {"xy1": "XY",
-		"xy2": "Flashfire",
-		"xy3": "Furious Fists",
-		"xy4": "Phantom Forces",
-		"xy5": "Primal Clash",
-		"xy6": "Roaring Skies",
-		"xy7": "Ancient Origins",
-		"xy8": "BREAKthrough",
-		"xy9": "BREAKpoint",
+sets = {"xy0" : "Kalos Starter Set",
+		"xy1" : "XY",
+		"xy2" : "Flashfire",
+		"xy3" : "Furious Fists",
+		"xy4" : "Phantom Forces",
+		"xy5" : "Primal Clash",
+		"xy6" : "Roaring Skies",
+		"xy7" : "Ancient Origins",
+		"xy8" : "BREAKthrough",
+		"xy9" : "BREAKpoint",
 		"xy10": "Fates Collide",
 		"xy11": "Steam Siege",
 		"xy12": "Evolutions",
-		"xyp": "Promo",
-		"g1": "Generations"}
+		"xyp" : "Promo",
+		"g1"  : "Generations",
+		"dc1" : "Double Crisis"}
 
 opener = urllib.request.build_opener()
 opener.addheaders = [('User-agent', 'Mozilla/5.0')]
@@ -47,8 +80,12 @@ opener.addheaders = [('User-agent', 'Mozilla/5.0')]
 
 def searchForCardsByName(n):
 	global cardFrame
+	root.title("PTCGBuilder - Searching")
 	cardFrame.destroy()
-	cardFrame = Frame(root)
+	scrollbarProxy.configure(height=740)
+	columnsEntryValidate()
+	scrollbarProxy.configure(width=int(columnsEntry.get())*250+8)
+	cardFrame = Frame(scrollbarProxy)
 	cardFrame.pack(fill="both")
 	n = n.strip()
 	extra = ""
@@ -62,7 +99,7 @@ def searchForCardsByName(n):
 		extra += isEX
 		n = n[:-3]
 	try:
-		r = opener.open(baseurl.format(name=n)+extra).read().decode()
+		r = opener.open(baseurl.format(name=n,pagenum=1)+extra).read().decode()
 	except urllib.error.URLError:
 		eFrame = Frame(cardFrame)
 		eL = Label(eFrame,text="No Internet/Pokemon.com is blocked")
@@ -86,40 +123,108 @@ def searchForCardsByName(n):
 		eL2.pack()
 		eFrame.pack()
 		return
-	fl = open("lastPage.html","w")
-	fl.write(r)
-	fl.close()
+	#fl = open("lastPage.html","w")
+	#fl.write(r)
+	#fl.close()
+	if '<div id="cards-load-more">' in r:
+		pages = r.split('<div id="cards-load-more">')[1].split("</div>")[0]
+		match = re.search('[0-9]+ of [0-9]+',pages)
+		pages = int(pages[match.start():match.end()].split(" ")[-1])
+	else:
+		pages = 1
 	r = r.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
-	u = r.split("<li>")[1:]
+	rawCardList = r.split("<li>")[1:]
+	found = []
+	found.extend(parseCardPage(rawCardList))
+	if pages > 1:
+		if pages > 20:
+			pages = 20
+		for i in range(2,pages+1):
+			retries = 10
+			while True:
+				try:
+					r = opener.open(baseurl.format(name=n, pagenum=i) + extra).read().decode()
+					if '<title>503' in r:
+						retries -= 1
+						if retries == 0:
+							break
+						time.sleep(10)
+					else:
+						r = r.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
+						rawCardList = r.split("<li>")[1:]
+						found.extend(parseCardPage(rawCardList,i-1))
+						break
+				except urllib.error.URLError:
+					retries -= 1
+					if retries == 0:
+						break
+					time.sleep(10)
+			if retries == 0:
+				eFrame = Frame(cardFrame)
+				eL = Label(eFrame, text="Error getting data for page "+str(i))
+				eL.pack()
+				eL2 = Label(eFrame, text="Try again later maybe?")
+				eL2.pack()
+				eFrame.pack()
+				return
 
-	# if len(u) > 6:
+	#print(len(found))
+	for card in found:
+		card.display()
+		#print(card.card.formatPretty())
 
-	searched = []
-	for i, data in enumerate(u):
+	setUpCardFrame()
+	root.title("PTCGBuilder")
+
+
+
+
+def parseCardPage(rawCardList,pagenum=0):
+	found = []
+	for i, data in enumerate(rawCardList):
 		page = data.split('<a href="')[1].split('">')[0].split("/")
 		set = page[-3]
 		num = page[-2]
 		name = data.split('alt="')[1].split('">')[0].replace("-", " ")
 		image = "http:" + data.split('<img src="')[1].split('"')[0]
 		c = Card(name, set, num, image)
-		buildCardDisplay(c).grid(row=i//6,column=i%6)
-		#searched.append(Card(name, set, num, image))
-	#for c in searched:print(c.formatPretty())
-
-
-
+		found.append(CardDisplay(c,i+(pagenum*12)))
+	return found
 
 def buildCardDisplay(c):
-	r = Frame(cardFrame)
-	img = BytesIO(urllib.request.urlopen(c.image).read())
-	i = Image.open(img)
+	i = c.getCardImage()
 	itk = ImageTk.PhotoImage(i)
+	r = Frame(cardFrame)
 	pic = Label(r, image=itk)
 	pic.image = itk
 	pic.pack()
 	name = Label(r,text=c.formatPretty())
 	name.pack()
 	return r
+
+
+def deleteOneWord(entry):
+	contents = entry.get()
+	try:
+		index = contents.rindex(" ")
+		entry.delete(index+1,END)
+	except ValueError:
+		entry.delete(0,END)
+
+def columnsEntryValidate():
+	if len(columnsEntry.get()) > 3:
+		columnsEntry.delete(3,END)
+	try:
+		int(columnsEntry.get())
+	except ValueError:
+		columnsEntry.delete(0,END)
+		columnsEntry.insert(0, "3")
+		return True
+	if int(columnsEntry.get()) <= 0:
+		columnsEntry.delete(0, END)
+		columnsEntry.insert(0,"3")
+	return True
+
 
 
 searchFrame = Frame(root)
@@ -130,11 +235,37 @@ searchEntry.focus_set()
 searchButton = Button(searchFrame,text="Search Card",command=lambda searchEntry=searchEntry:searchForCardsByName(searchEntry.get()))
 searchButton.grid(row=0,column=1)
 root.bind("<Return>",lambda x,searchButton=searchButton:searchButton.invoke())
+searchEntry.bind("<Control-BackSpace>", lambda x,searchEntry=searchEntry:deleteOneWord(searchEntry))
+columnsLabel = Label(searchFrame,text="Columns: ")
+columnsLabel.grid(row=0,column=2)
+columnsEntry = Entry(searchFrame,width=3,validate="focus",validatecommand=columnsEntryValidate)
+columnsEntry.grid(row=0,column=3)
+columnsEntry.insert(0,"3")
 
-cardFrame = Frame(root)
+
+cardRoot = Frame(root)
+cardRoot.pack(fill="both")
+scrollbar = external.AutoScrollbar(cardRoot)
+scrollbar.grid(row=0, column=1, sticky=N+S)
+scrollbarProxy = Canvas(cardRoot, yscrollcommand=scrollbar.set, width=int(columnsEntry.get())*250+8,height=740)
+scrollbarProxy.grid(row=0, column=0, sticky=N+S+E+W)
+scrollbar.config(command=scrollbarProxy.yview)
+cardRoot.grid_rowconfigure(0, weight=1)
+cardRoot.grid_columnconfigure(0, weight=1)
+cardFrame = Frame(scrollbarProxy)
 cardFrame.pack(fill="both")
 
+scrollbarProxy.create_window(0, 0, anchor=NW, window=cardFrame)
+cardFrame.update_idletasks()
+scrollbarProxy.config(scrollregion=scrollbarProxy.bbox("all"))
 
+def setUpCardFrame():
+	scrollbarProxy.create_window(0, 0, anchor=NW, window=cardFrame)
+	cardFrame.update_idletasks()
+	scrollbarProxy.config(scrollregion=scrollbarProxy.bbox("all"))
+
+##Windows
+root.bind_all("<MouseWheel>", lambda e,canvas=scrollbarProxy:canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
 
 
 root.mainloop()
