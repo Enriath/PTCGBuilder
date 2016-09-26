@@ -5,6 +5,7 @@ from io import BytesIO
 import sys
 import re
 import time
+import platform
 
 import external
 
@@ -13,7 +14,10 @@ root.title("PTCGBuilder")
 #root.geometry("758x800")
 
 
+
 class Card:
+
+	ImageDimensions = (245,342)
 
 	def __init__(self,name,set,number,imageURL,isEX=False,isBreak=False,isMega=False):
 		self.name = name
@@ -87,10 +91,10 @@ def searchForCardsByName(n):
 	global cardFrame
 	root.title("PTCGBuilder - Searching")
 	cardFrame.destroy()
-	#scrollbarProxy.configure(height=740)
-	scrollbarProxy.configure(height=370)
-	columnsEntryValidate()
-	scrollbarProxy.configure(width=int(columnsEntry.get())*250+8)
+	entryValidate(columnsEntry,"3")
+	entryValidate(rowsEntry,"2")
+	scrollbarProxy.configure(height=int(rowsEntry.get())*(Card.ImageDimensions[1]+30))
+	scrollbarProxy.configure(width=int(columnsEntry.get())*(Card.ImageDimensions[0]+4))
 	cardFrame = Frame(scrollbarProxy)
 	cardFrame.pack(fill="both")
 	n = n.strip()
@@ -213,18 +217,18 @@ def deleteOneWord(entry):
 	except ValueError:
 		entry.delete(0,END)
 
-def columnsEntryValidate():
-	if len(columnsEntry.get()) > 3:
-		columnsEntry.delete(3,END)
+def entryValidate(entry,default):
+	if len(entry.get()) > 3:
+		entry.delete(3,END)
 	try:
-		int(columnsEntry.get())
+		int(entry.get())
 	except ValueError:
-		columnsEntry.delete(0,END)
-		columnsEntry.insert(0, "3")
+		entry.delete(0,END)
+		entry.insert(0, default)
 		return True
-	if int(columnsEntry.get()) <= 0:
-		columnsEntry.delete(0, END)
-		columnsEntry.insert(0,"3")
+	if int(entry.get()) <= 0:
+		entry.delete(0, END)
+		entry.insert(0,default)
 	return True
 
 
@@ -240,16 +244,25 @@ root.bind("<Return>",lambda x,searchButton=searchButton:searchButton.invoke())
 searchEntry.bind("<Control-BackSpace>", lambda x,searchEntry=searchEntry:deleteOneWord(searchEntry))
 columnsLabel = Label(searchFrame,text="Columns: ")
 columnsLabel.grid(row=0,column=2)
-columnsEntry = Entry(searchFrame,width=3,validate="focus",validatecommand=columnsEntryValidate)
+columnsEntry = Entry(searchFrame,width=3,validate="focus")
+columnsEntry.configure(validatecommand=lambda x=columnsEntry:entryValidate(x,"3"))
 columnsEntry.grid(row=0,column=3)
 columnsEntry.insert(0,"3")
+rowsLabel = Label(searchFrame,text="Rows: ")
+rowsLabel.grid(row=0,column=4)
+rowsEntry = Entry(searchFrame,width=3,validate="focus")
+rowsEntry.configure(validatecommand=lambda x=rowsEntry:entryValidate(x,"2"))
+rowsEntry.grid(row=0,column=5)
+rowsEntry.insert(0,"2")
 
 
 cardRoot = Frame(root)
 cardRoot.pack(fill="both")
 scrollbar = external.AutoScrollbar(cardRoot)
 scrollbar.grid(row=0, column=1, sticky=N+S)
-scrollbarProxy = Canvas(cardRoot, yscrollcommand=scrollbar.set, width=int(columnsEntry.get())*250+8,height=740)
+scrollbarProxy = Canvas(cardRoot, yscrollcommand=scrollbar.set)
+scrollbarProxy.configure(height=int(rowsEntry.get())*(Card.ImageDimensions[1]+30))
+scrollbarProxy.configure(width=int(columnsEntry.get())*(Card.ImageDimensions[0]+4))
 scrollbarProxy.grid(row=0, column=0, sticky=N+S+E+W)
 scrollbar.config(command=scrollbarProxy.yview)
 cardRoot.grid_rowconfigure(0, weight=1)
@@ -266,8 +279,17 @@ def setUpCardFrame():
 	cardFrame.update_idletasks()
 	scrollbarProxy.config(scrollregion=scrollbarProxy.bbox("all"))
 
-##Windows
-root.bind_all("<MouseWheel>", lambda e,canvas=scrollbarProxy:canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+
+if platform.system() == "Windows":
+
+	root.bind_all("<MouseWheel>", lambda e,canvas=scrollbarProxy:canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+elif platform.system() == "Darwin":#OSX
+	##UNTESTED!!!
+	root.bind_all("<MouseWheel>", lambda e, canvas=scrollbarProxy: canvas.yview_scroll(e.delta, "units"))
+else:#Linux et al. X11 mainly
+	##UNTESTED!!!
+	root.bind_all("<Button-4>", lambda e, canvas=scrollbarProxy: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+	root.bind_all("<Button-5>", lambda e, canvas=scrollbarProxy: canvas.yview_scroll(int(e.delta / 120), "units"))
 
 
 root.mainloop()
