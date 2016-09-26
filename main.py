@@ -52,13 +52,13 @@ def searchForCardsByName(n):
 	cardFrame.pack(fill="both")
 	n = n.strip()
 	extra = ""
-	if n[-6:].upper() == " BREAK":
+	if n[-6:].upper() == " BREAK" or n.upper() == "BREAK":
 		extra += isBreak
 		n = n[:-6]
-	elif n[:5].lower() == "mega ":
+	if n[:5].lower() == "mega " or n.lower() == "mega":
 		extra += isMega
 		n = n[5:]
-	elif n[-3:].upper() == " EX":
+	if n[-3:].upper() == " EX" or n.upper() == "EX":
 		extra += isEX
 		n = n[:-3]
 	try:
@@ -70,6 +70,14 @@ def searchForCardsByName(n):
 		eFrame.pack()
 		return
 
+	if '<title>503' in r:
+		eFrame = Frame(cardFrame)
+		eL = Label(eFrame,text="503 Error")
+		eL.pack()
+		eL2 = Label(eFrame,text="Try again later maybe?")
+		eL2.pack()
+		eFrame.pack()
+		return
 	if '<div class="no-results' in r:
 		eFrame = Frame(cardFrame)
 		eL = Label(eFrame,text="No Pokemon found")
@@ -78,6 +86,9 @@ def searchForCardsByName(n):
 		eL2.pack()
 		eFrame.pack()
 		return
+	fl = open("lastPage.html","w")
+	fl.write(r)
+	fl.close()
 	r = r.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
 	u = r.split("<li>")[1:]
 
