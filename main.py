@@ -10,16 +10,28 @@ import external
 
 class CardSelector:
 
+	#The base search URL, with .format() substitution strings in the right places.
 	baseurl = "http://www.pokemon.com/uk/pokemon-tcg/pokemon-cards/{pagenum}?cardName={name}&format=modified-legal"
+	#Add these on to the base URL to search for EX, Mega, and BREAK Pokemon
 	isEX = "&ex-pokemon=on"
 	isMega = "&mega-ex=on"
 	isBreak = "&break=on"
 
-	def __init__(self):pass
+	def __init__(self):
+		self.title = "PTCGBuilder Card Search"
 
 	def build(self):
+		"""
+		Actually creates and shows the Card Selector window.
+		This means one instance can be re-used by the Deck Builder
+
+		Args: Nothing
+
+		Returns: Nothing
+		"""
 		self.root = Toplevel()
-		self.root.title("PTCGBuilder")
+		self.root.title(self.title)
+		self.root.protocol("WM_DELETE_WINDOW", self.root.destroy)
 
 		self.opener = urllib.request.build_opener()
 		self.opener.addheaders = [('User-agent', 'Mozilla/5.0')]
@@ -79,7 +91,16 @@ class CardSelector:
 						  lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(e.delta / 120), "units"))
 
 	def searchForCardsByName(self,n):
-		self.root.title("PTCGBuilder - Searching")
+		"""
+		Searches for a card by a given name, including EX, BREAK, and Mega pokemon.
+		Function also displays the Cards in the Card Frame
+
+		Args:
+		n (String): Part of or whole name of a Card.
+
+		Returns:Nothing
+		"""
+		self.root.title(self.title+" - Searching")
 		self.cardFrame.destroy()
 		self.entryValidate(self.columnsEntry, "3")
 		self.entryValidate(self.rowsEntry, "2")
@@ -105,7 +126,7 @@ class CardSelector:
 			eL = Label(eFrame, text="No Internet/Pokemon.com is blocked")
 			eL.pack()
 			eFrame.pack()
-			self.root.title("PTCGBuilder")
+			self.root.title(self.title)
 			return
 
 		if '<title>503' in r:
@@ -115,7 +136,7 @@ class CardSelector:
 			eL2 = Label(eFrame, text="Try again later maybe?")
 			eL2.pack()
 			eFrame.pack()
-			self.root.title("PTCGBuilder")
+			self.root.title(self.title)
 			return
 		if '<div class="no-results' in r:
 			eFrame = Frame(self.cardFrame)
@@ -124,7 +145,7 @@ class CardSelector:
 			eL2 = Label(eFrame, text="Check for spelling mistakes")
 			eL2.pack()
 			eFrame.pack()
-			self.root.title("PTCGBuilder")
+			self.root.title(self.title)
 			return
 
 		if '<div id="cards-load-more">' in r:
@@ -167,18 +188,26 @@ class CardSelector:
 					eL2 = Label(eFrame, text="Try again later maybe?")
 					eL2.pack()
 					eFrame.pack()
-					self.root.title("PTCGBuilder")
+					self.root.title(self.title)
 					return
 
-		# print(len(found))
 		for card in found:
 			card.display()
-		# print(card.card.formatPretty())
 
 		self.setUpCardFrame()
-		self.root.title("PTCGBuilder")
+		self.root.title(self.title)
 
 	def parseCardPage(self, rawCardList, pagenum=0):
+		"""
+		Parses a page's worth of cards, getting the data needed for a Card object.
+
+		Args:
+		rawCardList (String[])		: A list of strings, each containing the HTML that displays the card.
+		pagenum 	(int, default=0): The current page number, minus 1 to ake maths easier. This is used in CardDislay.
+
+		Returns: CardDisplay[]
+		A list of all the display objects for each card on this page.
+		"""
 		found = []
 		for i, data in enumerate(rawCardList):
 			page = data.split('<a href="')[1].split('">')[0].split("/")
@@ -189,7 +218,7 @@ class CardSelector:
 			if name[-6:].upper() == " BREAK":
 				c = Card(name, set, num, image, False, True)
 			elif name[:2].upper() == "M ":
-				c = Card(name, set, num, image, False, False, True)
+				c = Card(name, set, num, image, True, False, True)
 			elif name[-3:].upper() == " EX":
 				c = Card(name, set, num, image, True)
 			else:
@@ -199,6 +228,14 @@ class CardSelector:
 
 	@staticmethod
 	def deleteOneWord(entry):
+		"""
+		Deletes a single word from an entry box. Used for Ctrl+Backspace binds.
+
+		Args:
+		entry (tkinter.Entry): The Entry widget to delete a word from.
+
+		Returns: Nothing
+		"""
 		contents = entry.get()
 		try:
 			index = contents.rindex(" ")
@@ -208,6 +245,21 @@ class CardSelector:
 
 	@staticmethod
 	def entryValidate(entry, default):
+		"""
+		Checks that an entry follows the following criteria:
+		Is <= 3 characters
+		Is an integer
+		Is > 0 numerically
+
+		Range of values, therefore, is between 1 and 999 as strings.
+
+		Args:
+		entry 	(tkinter.Entry)	: The Entry widget to validate.
+		default (int as String)	: Th default value to reset to if one of the criteria is not met.
+
+		Returns: True
+		This is so the Entry Validation doesn't throw a hissy fit.
+		"""
 		if len(entry.get()) > 3:
 			entry.delete(3, END)
 		try:
@@ -222,19 +274,38 @@ class CardSelector:
 		return True
 
 	def setUpCardFrame(self):
+		"""
+		Forces the Scrollbar Proxy Canvas to render the new Card Frame, plus forces the required updates.
+		May not be necessary, but it's good to be sure.
+
+		Args: Nothing
+
+		Returns: Nothing
+		"""
 		self.scrollbarProxy.create_window(0, 0, anchor=NW, window=self.cardFrame)
 		self.cardFrame.update_idletasks()
 		self.scrollbarProxy.config(scrollregion=self.scrollbarProxy.bbox("all"))
 
 	def getProvidedCardGridWidth(self):
+		"""
+		Allows CardDisplay.display() to get the columns to display. This is crucial.
+
+		Args: None
+
+		Returns: int
+		The columns to display
+		"""
 		self.entryValidate(self.columnsEntry,"3")
 		return int(self.columnsEntry.get())
 
 
 class Card:
 
+	#Default Card image dimensions
+	#Used to set up the Scrollbar Proxy Canvas
 	ImageDimensions = (245,342)
 
+	#The Pretty Set Names
 	sets = {"xy0": "Kalos Starter Set",
 			"xy1": "XY",
 			"xy2": "Flashfire",
@@ -253,6 +324,20 @@ class Card:
 			"dc1": "Double Crisis"}
 
 	def __init__(self,name,set,number,imageURL,isEX=False,isBreak=False,isMega=False):
+		"""
+		Builds a Card object
+
+		Args:
+		name 		(String)				: The name of the card
+		set 		(String)				: The set code, see Card.sets
+		number 		(String)				: The number. Must be a string to support special sets, like Radiant Collections (RC##)
+		imageURL 	(String)				: The image URL
+		isEX 		(Boolean, default=False): Is the card an EX?
+		isBreak 	(Boolean, default=False): Is the card a BREAK Evolution? Used for rendering the card.
+		isMega 		(Boolean, default=False): Is the card a Mega Evolution?
+
+		Returns: Nothing
+		"""
 		self.name = name
 		self.set = set
 		self.number = number
@@ -262,24 +347,57 @@ class Card:
 		self.isMega = isMega
 
 	def getCardImage(self):
+		"""
+		Fetches the card image
+
+		Args: Nothing
+
+		Returns: PIL.Image
+		The image at the card's stored imageURL, downloaded straight to RAM. Should be PNG.
+		"""
 		img = BytesIO(urllib.request.urlopen(self.imageURL).read())
 		i = Image.open(img)
 		return i
 
 	def getPrettySet(self):
+		"""
+		Takes the raw, ugly set code, and uses Card.sets to get the pretty set name
+		If the code doesn't exist, return the raw ugly set code
+
+		Args: Nothing
+
+		Returns: String
+		Either the pretty set name or the ugly set code.
+		"""
 		try:
 			return Card.sets[self.set]
 		except KeyError:
 			return self.set
 
 	def formatPretty(self):
+		"""
+		Makes a descriptive string of all the card details. Used in CardDisplay.display()
+
+		Args: Nothing
+
+		Returns: String
+		"""
 		return self.name+", "+self.getPrettySet()+" #"+self.number
 
 
 class CardDisplay:
 
 	def __init__(self,parent,card,num):
-	#def __init__(self,card,num):
+		"""
+		Builds a display widget from a card object and a locating number
+
+		Args:
+		parent 	(CardSelector)	: Required to access the desired column ammount in display()
+		card 	(Card)			: The Card object to use as data
+		num 	(int)			: The locating number, used to correctly place the card in the grid.
+
+		Returns: Nothing
+		"""
 		self.card = card
 		self.parent = parent
 		i = card.getCardImage()
@@ -293,14 +411,22 @@ class CardDisplay:
 		name = Label(self.root, text=card.formatPretty())
 		name.pack()
 		self.num = num
+
 	def display(self):
+		"""
+		Actually draws the widget. This makes all the cards appear at once.
+
+		Args: Nothing
+
+		Returns: Nothing
+		"""
 		self.root.grid(row=self.num // self.parent.getProvidedCardGridWidth(), column=self.num % self.parent.getProvidedCardGridWidth())
 
 
 ##BASIC TEST CODE
 
 root = Tk()
-root.title("TESTER")
+root.title("PTCGBuilder")
 
 cardSelector = CardSelector()
 
