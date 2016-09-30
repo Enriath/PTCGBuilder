@@ -49,13 +49,13 @@ class CardSelector:
 		columnsLabel = Label(searchFrame, text="Columns: ")
 		columnsLabel.grid(row=0, column=2)
 		self.columnsEntry = Entry(searchFrame, width=3, validate="focus")
-		self.columnsEntry.configure(validatecommand=lambda x=self.columnsEntry: self.entryValidate(x, "3"))
+		self.columnsEntry.configure(validatecommand=lambda x=self.columnsEntry: entryValidate(x, 3, "3"))
 		self.columnsEntry.grid(row=0, column=3)
 		self.columnsEntry.insert(0, "3")
 		rowsLabel = Label(searchFrame, text="Rows: ")
 		rowsLabel.grid(row=0, column=4)
 		self.rowsEntry = Entry(searchFrame, width=3, validate="focus")
-		self.rowsEntry.configure(validatecommand=lambda x=self.rowsEntry: self.entryValidate(x, "2"))
+		self.rowsEntry.configure(validatecommand=lambda x=self.rowsEntry: entryValidate(x, 3, "2"))
 		self.rowsEntry.grid(row=0, column=5)
 		self.rowsEntry.insert(0, "2")
 
@@ -99,8 +99,8 @@ class CardSelector:
 		"""
 		self.root.title(self.title+" - Searching")
 		self.cardFrame.destroy()
-		self.entryValidate(self.columnsEntry, "3")
-		self.entryValidate(self.rowsEntry, "2")
+		entryValidate(self.columnsEntry, 3, "3")
+		entryValidate(self.rowsEntry, 3, "2")
 		self.scrollbarProxy.configure(height=int(self.rowsEntry.get()) * (Card.ImageDimensions[1] + 30))
 		self.scrollbarProxy.configure(width=int(self.columnsEntry.get()) * (Card.ImageDimensions[0] + 4))
 		self.cardFrame = Frame(self.scrollbarProxy)
@@ -240,36 +240,6 @@ class CardSelector:
 		except ValueError:
 			entry.delete(0, END)
 
-	@staticmethod
-	def entryValidate(entry, default):
-		"""
-		Checks that an entry follows the following criteria:
-		Is <= 3 characters
-		Is an integer
-		Is > 0 numerically
-
-		Range of values, therefore, is between 1 and 999 as strings.
-
-		Args:
-		entry 	(tkinter.Entry)	: The Entry widget to validate.
-		default (int as String)	: Th default value to reset to if one of the criteria is not met.
-
-		Returns: True
-		This is so the Entry Validation doesn't throw a hissy fit.
-		"""
-		if len(entry.get()) > 3:
-			entry.delete(3, END)
-		try:
-			int(entry.get())
-		except ValueError:
-			entry.delete(0, END)
-			entry.insert(0, default)
-			return True
-		if int(entry.get()) <= 0:
-			entry.delete(0, END)
-			entry.insert(0, default)
-		return True
-
 	def setUpCardFrame(self):
 		"""
 		Forces the Scrollbar Proxy Canvas to render the new Card Frame, plus forces the required updates.
@@ -292,7 +262,7 @@ class CardSelector:
 		Returns: int
 		The columns to display
 		"""
-		self.entryValidate(self.columnsEntry,"3")
+		entryValidate(self.columnsEntry, 3, "3")
 		return int(self.columnsEntry.get())
 
 
@@ -303,22 +273,22 @@ class Card:
 	ImageDimensions = (245,342)
 
 	#The Pretty Set Names
-	sets = {"xy0": "Kalos Starter Set",
-			"xy1": "XY",
-			"xy2": "Flashfire",
-			"xy3": "Furious Fists",
-			"xy4": "Phantom Forces",
-			"xy5": "Primal Clash",
-			"xy6": "Roaring Skies",
-			"xy7": "Ancient Origins",
-			"xy8": "BREAKthrough",
-			"xy9": "BREAKpoint",
-			"xy10": "Fates Collide",
-			"xy11": "Steam Siege",
-			"xy12": "Evolutions",
-			"xyp": "Promo",
-			"g1": "Generations",
-			"dc1": "Double Crisis"}
+	sets = {"xy0":	"Kalos Starter Set",
+			"xy1":	"XY",
+			"xy2":	"Flashfire",
+			"xy3":	"Furious Fists",
+			"xy4":	"Phantom Forces",
+			"xy5":	"Primal Clash",
+			"xy6":	"Roaring Skies",
+			"xy7":	"Ancient Origins",
+			"xy8":	"BREAKthrough",
+			"xy9":	"BREAKpoint",
+			"xy10":	"Fates Collide",
+			"xy11":	"Steam Siege",
+			"xy12":	"Evolutions",
+			"xyp":	"Promo",
+			"g1":	"Generations",
+			"dc1":	"Double Crisis"}
 
 	def __init__(self,name,set,number,imageURL,isEX=False,isBreak=False,isMega=False):
 		"""
@@ -371,6 +341,16 @@ class Card:
 		except KeyError:
 			return self.set
 
+	def getPrettySetAndCardNum(self):
+		"""
+		Returns the pretty set and the card number, for use in the deck builder
+
+		Args: Nothing
+
+		Returns: String
+		"""
+		return self.getPrettySet()+" #"+self.number
+
 	def formatPretty(self):
 		"""
 		Makes a descriptive string of all the card details. Used in CardDisplay.display()
@@ -379,7 +359,7 @@ class Card:
 
 		Returns: String
 		"""
-		return self.name+", "+self.getPrettySet()+" #"+self.number
+		return self.name+", "+self.getPrettySetAndCardNum()
 
 
 class CardDisplay:
@@ -409,6 +389,8 @@ class CardDisplay:
 		name.pack()
 		self.num = num
 
+		self.root.bind_all("<Double-Button-1>",lambda e,c=self.card: requestCardCount(c))
+
 	def display(self):
 		"""
 		Actually draws the widget. This makes all the cards appear at once.
@@ -422,12 +404,105 @@ class CardDisplay:
 
 ##BASIC TEST CODE
 
+from tkinter.ttk import Treeview
+from collections import OrderedDict
+
 root = Tk()
 root.title("PTCGBuilder")
 
 cardSelector = CardSelector()
 
-button = Button(root,text="CLICK ME",width=40,height=40,command=cardSelector.build)
-button.pack(fill="both")
+deckRoot = Frame(root)
+deckRoot.pack()
+
+toolbarRoot = Frame(deckRoot)
+toolbarRoot.pack(fill="x")
+
+addCardB = Button(toolbarRoot,text="Add Card",width=10,height=2,command = lambda c=cardSelector:c.build())
+addCardB.pack(anchor="w",side=LEFT)
+
+Label(toolbarRoot,text="  # of Cards:").pack(anchor="w",side=LEFT)
+
+totalCards = IntVar()
+totalCards.set(0)
+
+Label(toolbarRoot,textvariable=totalCards).pack(anchor="w",side=LEFT,padx=20)
+
+remCardB = Button(toolbarRoot,text="Remove Card",width=10,height=2,command = lambda: requestDeleteCardFromDeck())
+remCardB.pack(anchor="w",side=LEFT)
+
+headers = OrderedDict()
+headers["name"]		= "Name"
+headers["count"]	= "Count"
+headers["setnum"]	= "Set/Number"
+
+deck = Treeview(deckRoot,height=25,columns=tuple(headers.keys()),show="tree headings")
+for k,v in headers.items():
+	deck.heading(k,text=v)
+
+deck.column("#0",width=90)
+deck.heading("#0",text="Type")
+
+roots = {}
+
+roots["Pokemon"]	= deck.insert("",END,text="Pokemon",open=True)
+roots["Items"]		= deck.insert("",END,text="Items",open=True)
+roots["Tools"]		= deck.insert("",END,text="Tools",open=True)
+roots["Supporter"]	= deck.insert("",END,text="Supporters",open=True)
+roots["Stadium"]	= deck.insert("",END,text="Stadiums",open=True)
+roots["Energy"]		= deck.insert("",END,text="Energy",open=True)
+
+deckItems = {}
+
+def entryValidate(entry, width, default):
+		"""
+		Checks that an entry follows the following criteria:
+		Is <= width characters
+		Is an integer
+		Is > 0 numerically
+
+		Range of values, therefore, is between 1 and (width*10)-1 as strings.
+
+		Args:
+		entry	(tkinter.Entry)	: The Entry widget to validate.
+		width 	(int)			: The maximum width of the input
+		default (int as String)	: Th default value to reset to if one of the criteria is not met.
+
+		Returns: True
+		This is so the Entry Validation doesn't throw a hissy fit.
+		"""
+		if len(entry.get()) > width:
+			entry.delete(width, END)
+		try:
+			int(entry.get())
+		except ValueError:
+			entry.delete(0, END)
+			entry.insert(0, default)
+			return True
+		if int(entry.get()) <= 0:
+			entry.delete(0, END)
+			entry.insert(0, default)
+		return True
+
+def requestCardCount(card):
+	root = Toplevel()
+	Label(root,text="How many of {card} do you want?").pack()
+	e = Entry(root,width=2,validate="key")
+	e.configure(validatecommand=lambda e=e:entryValidate(e,2,"1"))
+	e.focus_set()
+	e.pack(fill="x")
+	b = Button(root,text="Submit")
+	b.configure(command = lambda e=e,top=root: addCardToDeck(top,card,e.get()))
+	b.pack(fill="x")
+
+def addCardToDeck(top,card,count):
+	global deckItems
+	top.destroy()
+	cardSelector.root.destroy()
+	#card = Card("Pikachu","g1","RC29","example.com")
+	id = deck.insert(roots["Pokemon"],END,values=[card.name,count,card.getPrettySetAndCardNum()])
+	deckItems[id] = card
+
+deck.pack()
 
 root.mainloop()
