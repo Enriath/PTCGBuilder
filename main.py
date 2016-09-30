@@ -19,6 +19,7 @@ class CardSelector:
 
 	def __init__(self):
 		self.title = "PTCGBuilder Card Search"
+		self.rowAndColEntryValidate = (root.register(self.rowAndColEntryValidate),"%d","%i","%s","%S")#Tkinter Wizardry!
 
 	def build(self):
 		"""
@@ -48,14 +49,14 @@ class CardSelector:
 		searchEntry.bind("<Control-BackSpace>", lambda x, searchEntry=searchEntry: self.deleteOneWord(searchEntry))
 		columnsLabel = Label(searchFrame, text="Columns: ")
 		columnsLabel.grid(row=0, column=2)
-		self.columnsEntry = Entry(searchFrame, width=3, validate="focus")
-		self.columnsEntry.configure(validatecommand=lambda x=self.columnsEntry: entryValidate(x, 3, "3"))
+		self.columnsEntry = Entry(searchFrame, width=3, validate="key")
+		self.columnsEntry.configure(validatecommand=self.rowAndColEntryValidate)
 		self.columnsEntry.grid(row=0, column=3)
 		self.columnsEntry.insert(0, "3")
 		rowsLabel = Label(searchFrame, text="Rows: ")
 		rowsLabel.grid(row=0, column=4)
-		self.rowsEntry = Entry(searchFrame, width=3, validate="focus")
-		self.rowsEntry.configure(validatecommand=lambda x=self.rowsEntry: entryValidate(x, 3, "2"))
+		self.rowsEntry = Entry(searchFrame, width=3, validate="key")
+		self.rowsEntry.configure(validatecommand=self.rowAndColEntryValidate)
 		self.rowsEntry.grid(row=0, column=5)
 		self.rowsEntry.insert(0, "2")
 
@@ -99,8 +100,6 @@ class CardSelector:
 		"""
 		self.root.title(self.title+" - Searching")
 		self.cardFrame.destroy()
-		entryValidate(self.columnsEntry, 3, "3")
-		entryValidate(self.rowsEntry, 3, "2")
 		self.scrollbarProxy.configure(height=int(self.rowsEntry.get()) * (Card.ImageDimensions[1] + 30))
 		self.scrollbarProxy.configure(width=int(self.columnsEntry.get()) * (Card.ImageDimensions[0] + 4))
 		self.cardFrame = Frame(self.scrollbarProxy)
@@ -213,13 +212,13 @@ class CardSelector:
 			name = data.split('alt="')[1].split('">')[0].replace("-", " ")
 			image = "http:" + data.split('<img src="')[1].split('"')[0]
 			if name[-6:].upper() == " BREAK":
-				c = Card(name, set, num, image, False, True)
+				c = Card(name, set, num, image, "Pokemon", False, True)
 			elif name[:2].upper() == "M ":
-				c = Card(name, set, num, image, True, False, True)
+				c = Card(name, set, num, image, "Pokemon", True, False, True)
 			elif name[-3:].upper() == " EX":
-				c = Card(name, set, num, image, True)
+				c = Card(name, set, num, image, "Pokemon", True)
 			else:
-				c = Card(name, set, num, image)
+				c = Card(name, set, num, image, "Pokemon")
 			found.append(CardDisplay(self, c,i + (pagenum * 12)))
 		return found
 
@@ -262,8 +261,51 @@ class CardSelector:
 		Returns: int
 		The columns to display
 		"""
-		entryValidate(self.columnsEntry, 3, "3")
 		return int(self.columnsEntry.get())
+
+
+	@staticmethod
+	def rowAndColEntryValidate(d, i, s, S):
+		"""
+		Called every time a key is pressed when the row and column entry boxes are focused
+		Uses Tkinter wizardry to get the parameters.
+		Big thanks to Bryan Oakley for this answer: http://stackoverflow.com/a/4140988
+
+		Args:
+		d (String): Type of action (1=insert, 0=delete, -1 for others)
+		i (String): Index of char string to be inserted/deleted, or -1
+		s (String): Value of entry prior to editing
+		S (String): The text string being inserted or deleted, if any
+
+		Returns: Boolean
+		True if the change passes validation, False if not
+		"""
+		#Clamp the length to 3 characters
+		if len(s) >= 3 and d == "1":
+			return False
+		v = ord(S)
+		#Clamp the value between 0 and 9
+		if v < 48 or v > 57:
+			return False
+		#Don't allow the last character to be deleted
+		if len(s) == 1 and d == "0":
+			return False
+		#Don't allow a lone 0 to be input
+		if v == 48 and s == " ":
+			return False
+		#Don't allow a lone 0 to be left
+		if d == "1":
+			value = s+S
+		else:
+			value = s
+		if int(i)+1 == len(value):
+			result = int(value)
+		else:
+			result = int(value[int(i)+1:])
+		if result == 0:
+			return False
+		#Otherwise, it's fine
+		return True
 
 
 class Card:
@@ -290,7 +332,7 @@ class Card:
 			"g1":	"Generations",
 			"dc1":	"Double Crisis"}
 
-	def __init__(self,name,set,number,imageURL,isEX=False,isBreak=False,isMega=False):
+	def __init__(self,name,set,number,imageURL,cardType,isEX=False,isBreak=False,isMega=False):
 		"""
 		Builds a Card object
 
@@ -299,6 +341,7 @@ class Card:
 		set 		(String)				: The set code, see Card.sets
 		number 		(String)				: The number. Must be a string to support special sets, like Radiant Collections (RC##)
 		imageURL 	(String)				: The image URL
+		cardType	(String)				: What type the card is (Pokemon, Item, Tool, Supporter, Stadium, Special Energy, Energy)
 		isEX 		(Boolean, default=False): Is the card an EX?
 		isBreak 	(Boolean, default=False): Is the card a BREAK Evolution? Used for rendering the card.
 		isMega 		(Boolean, default=False): Is the card a Mega Evolution?
@@ -309,9 +352,12 @@ class Card:
 		self.set = set
 		self.number = number
 		self.imageURL = imageURL
+		self.type = cardType
 		self.isEX = isEX
 		self.isBreak = isBreak
 		self.isMega = isMega
+		self.image = None
+		self.cacheImage()
 
 	def getCardImage(self):
 		"""
@@ -325,6 +371,19 @@ class Card:
 		img = BytesIO(urllib.request.urlopen(self.imageURL).read())
 		i = Image.open(img)
 		return i
+
+	def cacheImage(self):
+		"""
+		Cache's the image. Used so the deck can have a pretty display on the side
+
+		Args: Nothing
+
+		Returns: Nothing
+		"""
+		i = self.getCardImage()
+		if self.isBreak:
+			i.thumbnail((245, 245), Image.ANTIALIAS)
+		self.image = i
 
 	def getPrettySet(self):
 		"""
@@ -377,10 +436,7 @@ class CardDisplay:
 		"""
 		self.card = card
 		self.parent = parent
-		i = card.getCardImage()
-		if card.isBreak:
-			i.thumbnail((245,245),Image.ANTIALIAS)
-		itk = ImageTk.PhotoImage(i)
+		itk = ImageTk.PhotoImage(card.image)
 		self.root = Frame(self.parent.cardFrame)
 		pic = Label(self.root, image=itk)
 		pic.image = itk
@@ -389,7 +445,8 @@ class CardDisplay:
 		name.pack()
 		self.num = num
 
-		self.root.bind_all("<Double-Button-1>",lambda e,c=self.card: requestCardCount(c))
+		pic.bind("<Double-Button-1>",lambda e,c=self.card: requestCardCount(c))
+		name.bind("<Double-Button-1>", lambda e, c=self.card: requestCardCount(c))
 
 	def display(self):
 		"""
@@ -406,6 +463,45 @@ class CardDisplay:
 
 from tkinter.ttk import Treeview
 from collections import OrderedDict
+
+
+def requestDeleteCardFromDeck(deck):
+	"""
+	A dialogue to ask if the user is sure they want to delete a card/s
+	Also displays an error if the user selects nothing and hits delete
+
+	Args:
+	deck (tkinter.ttk.Treeview): The deck Treeview. So I don't have to work with globals, and can use multiple decks
+
+	Returns: Nothing
+	"""
+	root = Toplevel()
+	sel = deck.selection()
+	print(repr(sel))
+	l = Label(root)
+	b1 = Button(root,height=2)
+	if sel == "":
+		l.configure(text="Please select a card first.")
+		b1.configure(text="Ok",width=4,command=root.destroy)
+		l.pack()
+		b1.pack(fill="x")
+	else:
+		sel = sel[0]
+		try:
+			card = deckItems[sel]
+			l.configure(text="Are you sure you want to delete {card}?".format(card=card.formatPretty()))
+			b1.configure(text="Yes",command=lambda:deleteCardFromDeckById(root,sel))
+			Button(root,text="No",height=2,command=root.destroy).grid(row=1,column=1,sticky="ew")
+			l.grid(row=0,column=0,columnspan=2)
+			b1.grid(row=1,column=0,sticky="ew")
+		except KeyError:
+			print(roots)
+			l.configure(text="Are you sure you want to delete all {section} cards?".format(section=roots.get(sel)))
+			b1.configure(text="Yes", command=lambda: deleteAllCardsFromSection(root, sel))
+			Button(root,text="No",height=2, command=root.destroy).grid(row=1, column=1,sticky="ew")
+			l.grid(row=0, column=0, columnspan=2)
+			b1.grid(row=1, column=0,sticky="ew")
+
 
 root = Tk()
 root.title("PTCGBuilder")
@@ -428,7 +524,7 @@ totalCards.set(0)
 
 Label(toolbarRoot,textvariable=totalCards).pack(anchor="w",side=LEFT,padx=20)
 
-remCardB = Button(toolbarRoot,text="Remove Card",width=10,height=2,command = lambda: requestDeleteCardFromDeck())
+remCardB = Button(toolbarRoot,text="Remove Card",width=10,height=2)
 remCardB.pack(anchor="w",side=LEFT)
 
 headers = OrderedDict()
@@ -437,71 +533,185 @@ headers["count"]	= "Count"
 headers["setnum"]	= "Set/Number"
 
 deck = Treeview(deckRoot,height=25,columns=tuple(headers.keys()),show="tree headings")
+remCardB.configure(command = lambda d=deck: requestDeleteCardFromDeck(d))
 for k,v in headers.items():
 	deck.heading(k,text=v)
 
 deck.column("#0",width=90)
 deck.heading("#0",text="Type")
 
-roots = {}
+roots = external.TwoWay()
 
-roots["Pokemon"]	= deck.insert("",END,text="Pokemon",open=True)
-roots["Items"]		= deck.insert("",END,text="Items",open=True)
-roots["Tools"]		= deck.insert("",END,text="Tools",open=True)
-roots["Supporter"]	= deck.insert("",END,text="Supporters",open=True)
-roots["Stadium"]	= deck.insert("",END,text="Stadiums",open=True)
-roots["Energy"]		= deck.insert("",END,text="Energy",open=True)
+roots.add("Pokemon", deck.insert("",END,text="Pokemon",open=True,values=["",0]))
+roots.add("Items", deck.insert("",END,text="Items",open=True,values=["",0]))
+roots.add("Tools", deck.insert("",END,text="Tools",open=True,values=["",0]))
+roots.add("Supporter", deck.insert("",END,text="Supporters",open=True,values=["",0]))
+roots.add("Stadium", deck.insert("",END,text="Stadiums",open=True,values=["",0]))
+roots.add("Energy", deck.insert("",END,text="Energy",open=True,values=["",0]))
 
 deckItems = {}
 
-def entryValidate(entry, width, default):
-		"""
-		Checks that an entry follows the following criteria:
-		Is <= width characters
-		Is an integer
-		Is > 0 numerically
+def cardCountEntryValidate(d, s, S):
+	"""
+	Called every time a key is pressed when the Card Count Dialogue box is open
+	Allows for values between 1 and 4 to be in the Entry at any one time.
 
-		Range of values, therefore, is between 1 and (width*10)-1 as strings.
+	Uses Tkinter wizardry to get the parameters.
+	Big thanks to Bryan Oakley for this answer: http://stackoverflow.com/a/4140988
 
-		Args:
-		entry	(tkinter.Entry)	: The Entry widget to validate.
-		width 	(int)			: The maximum width of the input
-		default (int as String)	: Th default value to reset to if one of the criteria is not met.
+	Args:
+	d (String): Type of action (1=insert, 0=delete, -1 for others)
+	s (String): Value of entry prior to editing
+	S (String): The text string being inserted or deleted, if any
 
-		Returns: True
-		This is so the Entry Validation doesn't throw a hissy fit.
-		"""
-		if len(entry.get()) > width:
-			entry.delete(width, END)
-		try:
-			int(entry.get())
-		except ValueError:
-			entry.delete(0, END)
-			entry.insert(0, default)
-			return True
-		if int(entry.get()) <= 0:
-			entry.delete(0, END)
-			entry.insert(0, default)
-		return True
+	Returns: Boolean
+	True if the change passes validation, False if not
+	"""
+	#Clamp the length to 1 character
+	if len(s) >= 1 and d == "1":
+		return False
+	v = ord(S)
+	#Clamp the input between 1 and 4
+	if v < 49 or v > 52:
+		return False
+	return True
+
+def cardCountEntryValidateIfEnergy(d, s, S):
+	"""
+	Called every time a key is pressed when the Card Count Dialogue box is open
+	Allows for values between 0 and 99 to be in the Entry at any one time.
+
+	Uses Tkinter wizardry to get the parameters.
+	Big thanks to Bryan Oakley for this answer: http://stackoverflow.com/a/4140988
+
+	Args:
+	d (String): Type of action (1=insert, 0=delete, -1 for others)
+	s (String): Value of entry prior to editing
+	S (String): The text string being inserted or deleted, if any
+
+	Returns: Boolean
+	True if the change passes validation, False if not
+	"""
+	#Clamp the length to 2 characters
+	if len(s) >= 2 and d == "1":
+		return False
+	v = ord(S)
+	#Clamp the input between 0 and 9
+	if v < 48 or v > 57:
+		return False
+	return True
+
+#More Tkinter Wizardry!
+cardCountEntryValidate = (root.register(cardCountEntryValidate), '%d', '%s', '%S')
+cardCountEntryValidateIfEnergy = (root.register(cardCountEntryValidateIfEnergy), '%d', '%s', '%S')
 
 def requestCardCount(card):
+	"""
+	Builds and displays a dialogue asking for the number of cards. Is called when a card is added,
+	but can also be called by double clicking a card in the Treeview
+
+	Args:
+	card (Card): The Card object containing the selected card's information.
+
+	Returns: Nothing
+	"""
+	global cardCountEntry
 	root = Toplevel()
-	Label(root,text="How many of {card} do you want?").pack()
-	e = Entry(root,width=2,validate="key")
-	e.configure(validatecommand=lambda e=e:entryValidate(e,2,"1"))
-	e.focus_set()
-	e.pack(fill="x")
+	Label(root,text="How many of {card} do you want?".format(card=card.name)).pack()
+	cardCountEntry = Entry(root,width=2,validate="key")
+	if card.type == "Energy":
+		cardCountEntry.configure(validatecommand=cardCountEntryValidateIfEnergy)
+	else:
+		cardCountEntry.configure(validatecommand=cardCountEntryValidate)
+	cardCountEntry.focus_set()
+	cardCountEntry.pack(fill="x")
 	b = Button(root,text="Submit")
-	b.configure(command = lambda e=e,top=root: addCardToDeck(top,card,e.get()))
+	b.configure(command = lambda e=cardCountEntry,top=root: addCardToDeck(top,card,e.get()))
 	b.pack(fill="x")
 
+
 def addCardToDeck(top,card,count):
+	"""
+	Adds a card to the deck. Also updates the counters.
+
+	Args:
+	top		(tkinter.Toplevel)	: The Toplevel of the Card Count dialogue, so it can be destroyed
+	card	(Card)				: The Card object containing all of the card's information
+	count	(String)			: The amount of said card to add to the deck. If empty, will stop the function instantly
+
+	Returns: Nothing
+	"""
 	global deckItems
+	if count != "":
+		top.destroy()
+		cardSelector.root.destroy()
+		#card = Card("Pikachu","g1","RC29","example.com")
+		id = deck.insert(roots.get(card.type),END,values=[card.name,count,card.getPrettySetAndCardNum()])
+		deckItems[id] = card
+		updateCardCounters(roots.get(card.type))
+
+def deleteCardFromDeckById(top,id):
+	"""
+	Deletes a card, then updates the counters
+
+	Args:
+	top	(tkinter.Toplevel)	: The Toplevel from the confirmation dialogue, so it can be destroyed
+	id	(String)			: The ID of the Treeview item to be destroyed
+
+	Returns: Nothing
+	"""
 	top.destroy()
-	cardSelector.root.destroy()
-	#card = Card("Pikachu","g1","RC29","example.com")
-	id = deck.insert(roots["Pokemon"],END,values=[card.name,count,card.getPrettySetAndCardNum()])
-	deckItems[id] = card
+	parent = deck.parent(id)
+	deck.delete(id)
+	updateCardCounters(parent)
+
+def deleteAllCardsFromSection(top,id):
+	"""
+	Deletes all the cards in an entire section, then updates the counters
+
+	Args:
+	top	(tkinter.Toplevel)	: The Toplevel from the confirmation dialogue, so it can be destroyed
+	id	(String)			: The ID of a root Treeview item to be destroyed
+
+	Returns: Nothing
+	"""
+	top.destroy()
+	items = deck.get_children(id)
+	for i in items:
+		deck.delete(i)
+	updateCardCounters(id)
+
+def updateCardCounters(root):
+	"""
+	Updates the total card counter and section card counters
+
+	Args:
+	root (String): Either a Treeview ID or all. If an ID is provided, only that section will be updated.
+
+	Returns: Nothing
+	"""
+	if root.lower() == "all":
+		total = 0
+		for k,v in roots.normal.items():
+			rootTotal = 0
+			items = deck.get_children(v)
+			for i in items:
+				c = int(deck.item(i,"values")[1])
+				total += c
+				rootTotal += c
+			deck.item(v,values=["",rootTotal])
+		totalCards.set(total)
+	else:
+		current = int(deck.item(root,"values")[1])
+		new = 0
+		items = deck.get_children(root)
+		for i in items:
+			c = int(deck.item(i, "values")[1])
+			new += c
+		deck.item(root, values=["", new])
+		delta = current - new
+		totalCards.set(totalCards.get()-delta)
+
 
 deck.pack()
 
