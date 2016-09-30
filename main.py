@@ -78,17 +78,14 @@ class CardSelector:
 		self.scrollbarProxy.config(scrollregion=self.scrollbarProxy.bbox("all"))
 
 		if platform.system() == "Windows":
-			self.root.bind_all("<MouseWheel>",
-						  lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+			self.root.bind_all("<MouseWheel>", lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 		elif platform.system() == "Darwin":  # OSX
 			##UNTESTED!!!
 			self.root.bind_all("<MouseWheel>", lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(e.delta, "units"))
 		else:  # Linux et al. X11 mainly
 			##UNTESTED!!!
-			self.root.bind_all("<Button-4>",
-						  lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
-			self.root.bind_all("<Button-5>",
-						  lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(e.delta / 120), "units"))
+			self.root.bind_all("<Button-4>", lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
+			self.root.bind_all("<Button-5>", lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(e.delta / 120), "units"))
 
 	def searchForCardsByName(self,n):
 		"""
