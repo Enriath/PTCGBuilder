@@ -16,7 +16,7 @@ A Pokemon TCG Deck Builder, built in Python!
 
 ###Current issues:
 
-* Missing Promo Cards from #102 onwards (for no reason).
+* Missing Promo Cards from #102 onwards [(see this issue for more information)](https://github.com/Hydrox6/PTCGBuilder/issues/4).
 
 ###Feel free to suggest features in the [Issues](https://github.com/Hydrox6/PTCGBuilder/issues) tab.
 
