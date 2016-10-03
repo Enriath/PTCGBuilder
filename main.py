@@ -308,15 +308,15 @@ class CardSelector:
 			image = "http:" + data.split('<img src="')[1].split('"')[0]
 			if cardType == "Pokemon":
 				if name[-6:].upper() == " BREAK":
-					c = Card(name, set, num, image, cardType, False, True)
+					c = Card(name, set, num, image, cardType, isBreak=True)
 				elif name[:2].upper() == "M ":
-					c = Card(name, set, num, image, cardType, True, False, True)
+					c = Card(name, set, num, image, cardType, isEX=True,isMega=True)
 				elif name[-3:].upper() == " EX":
-					c = Card(name, set, num, image, cardType, True)
+					c = Card(name, set, num, image, cardType, isEX=True)
 				else:
 					c = Card(name, set, num, image, cardType)
 			elif cardType == "Special Energy":
-				c = Card(name, set, num, image, "Energy",False,False,False,True)
+				c = Card(name, set, num, image, "Energy",isSpecialEnergy=True)
 			else:
 				c = Card(name, set, num, image, cardType)
 			found.append(CardDisplay(self, c,i + startFrom))
@@ -432,7 +432,8 @@ class Card:
 			"g1":	"Generations",
 			"dc1":	"Double Crisis"}
 
-	def __init__(self,name,set,number,imageURL,cardType,isEX=False,isBreak=False,isMega=False,isSpecialEnergy=False):
+	#def __init__(self,name,set,number,imageURL,cardType,isEX=False,isBreak=False,isMega=False,isSpecialEnergy=False):
+	def __init__(self,name,set,number,imageURL,cardType,**kwargs):
 		"""
 		Builds a Card object
 
@@ -442,6 +443,8 @@ class Card:
 		number 			(String)				: The number. Must be a string to support special sets, like Radiant Collections (RC##)
 		imageURL 		(String)				: The image URL
 		cardType		(String)				: What type the card is (Pokemon, Item, Tool, Supporter, Stadium, Special Energy, Energy)
+
+		KwArgs:
 		isEX 			(Boolean, default=False): Is the card an EX?
 		isBreak 		(Boolean, default=False): Is the card a BREAK Evolution? Used for rendering the card.
 		isMega 			(Boolean, default=False): Is the card a Mega Evolution?
@@ -454,10 +457,14 @@ class Card:
 		self.number = number
 		self.imageURL = imageURL
 		self.type = cardType
-		self.isEX = isEX
-		self.isBreak = isBreak
-		self.isMega = isMega
-		self.isSpecialEnergy = isSpecialEnergy
+		##Parse kwargs
+		for key in ('isEX', 'isBreak', 'isMega', 'isSpecialEnergy'):
+			#print(key)
+			if key in kwargs:
+				setattr(self,key,kwargs[key])
+			else:
+				setattr(self,key,False)
+		##Set up image
 		self.image = None
 		self.cacheImage()
 
@@ -732,6 +739,7 @@ def requestCardCount(card):
 	b = Button(root,text="Submit",height=4)
 	b.configure(command = lambda e=cardCountEntry,top=root: addCardToDeck(top,card,e.get()))
 	b.pack(fill="x")
+	cardCountEntry.bind("<Return>",lambda e,b=b:b.invoke())
 
 
 def addCardToDeck(top,card,count):
