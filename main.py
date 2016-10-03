@@ -6,6 +6,8 @@ import re
 import time
 import platform
 
+from collections import OrderedDict
+
 import external
 
 class CardSelector:
@@ -16,6 +18,15 @@ class CardSelector:
 	isEX = "&ex-pokemon=on"
 	isMega = "&mega-ex=on"
 	isBreak = "&break=on"
+	#Filters for card types
+	typeFilters = OrderedDict()
+	typeFilters["Pokemon"] = "&basic-pokemon=on&stage-1-pokemon=on&stage-2-pokemon=on"+isEX+isMega+isBreak
+	typeFilters["Items"] = "&trainer=on"
+	typeFilters["Tools"] = "&trainer-pokemon-tool=on"
+	typeFilters["Supporters"] = "&trainer-supporter=on"
+	typeFilters["Stadiums"] = "&trainer-stadium=on"
+	typeFilters["Special Energy"] = "&special-energy=on"
+	typeFilters["Energy"] = "&basic-energy=on"
 
 	def __init__(self):
 		self.title = "PTCGBuilder Card Search"
@@ -116,31 +127,19 @@ class CardSelector:
 			extra += CardSelector.isEX
 			n = n[:-3]
 		try:
+			n = n.replace(" ","+")
 			r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=1) + extra).read().decode()
 		except urllib.error.URLError:
-			eFrame = Frame(self.cardFrame)
-			eL = Label(eFrame, text="No Internet/Pokemon.com is blocked")
-			eL.pack()
-			eFrame.pack()
+			self.displayErrorMessage("No Internet/Pokemon.com is blocked")
 			self.root.title(self.title)
 			return
 
 		if '<title>503' in r:
-			eFrame = Frame(self.cardFrame)
-			eL = Label(eFrame, text="503 Error")
-			eL.pack()
-			eL2 = Label(eFrame, text="Try again later maybe?")
-			eL2.pack()
-			eFrame.pack()
+			self.displayErrorMessage("503 Error","Try again later maybe?")
 			self.root.title(self.title)
 			return
 		if '<div class="no-results' in r:
-			eFrame = Frame(self.cardFrame)
-			eL = Label(eFrame, text="No Pokemon found")
-			eL.pack()
-			eL2 = Label(eFrame, text="Check for spelling mistakes")
-			eL2.pack()
-			eFrame.pack()
+			self.displayErrorMessage("No Pokemon found","Check for spelling mistakes")
 			self.root.title(self.title)
 			return
 
@@ -150,27 +149,72 @@ class CardSelector:
 			pages = int(pages[match.start():match.end()].split(" ")[-1])
 		else:
 			pages = 1
-		r = r.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
-		rawCardList = r.split("<li>")[1:]
-		found = []
-		found.extend(self.parseCardPage(rawCardList))
-		if pages > 1:
-			if pages > 20:
-				pages = 20
-			for i in range(2, pages + 1):
+
+		#EX, Mega, and BREAKs only have pokemon, so might as well use old version for them.
+		if not extra == "":
+			found = []
+			found.extend(self.parseCardPage(r,"Pokemon"))
+			if pages > 1:
+				if pages > 20:
+					pages = 20
+				for i in range(2, pages + 1):
+					retries = 10
+					while True:
+						try:
+							r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=i) + extra).read().decode()
+							if '<title>503' in r:
+								retries -= 1
+								if retries == 0:
+									break
+								time.sleep(10)
+							else:
+								found.extend(self.parseCardPage(r,"Pokemon",i - 1))
+								break
+						except urllib.error.URLError:
+							retries -= 1
+							if retries == 0:
+								break
+							time.sleep(10)
+					if retries == 0:
+						self.displayErrorMessage("Error getting data for page " + str(i), "Try again later maybe?")
+						self.root.title(self.title)
+						return
+		else:
+			try:
+				r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=pages)).read().decode()
+			except urllib.error.URLError:
+				self.displayErrorMessage("No Internet/Pokemon.com is blocked")
+				self.root.title(self.title)
+				return
+			rawPage = r.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
+			rawCardList = rawPage.split("<li>")[1:]
+			total = ((pages-1)*12) + len(rawCardList)
+			found = []
+			currentTotal = 0
+			for type,filter in CardSelector.typeFilters.items():
+				#Get # of pages of current type
+				currentPages = 0
 				retries = 10
 				while True:
 					try:
-						r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=i) + extra).read().decode()
+						r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=1) + filter).read().decode()
 						if '<title>503' in r:
 							retries -= 1
 							if retries == 0:
 								break
 							time.sleep(10)
+						if '<div class="no-results' in r:
+							break
 						else:
-							r = r.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
-							rawCardList = r.split("<li>")[1:]
-							found.extend(self.parseCardPage(rawCardList, i - 1))
+							if '<div id="cards-load-more">' in r:
+								tempPages = r.split('<div id="cards-load-more">')[1].split("</div>")[0]
+								match = re.search('[0-9]+ of [0-9]+', tempPages)
+								currentPages = int(tempPages[match.start():match.end()].split(" ")[-1])
+							else:
+								currentPages = 1
+							foundThisPage = self.parseCardPage(r, type, currentTotal)
+							found.extend(foundThisPage)
+							currentTotal += len(foundThisPage)
 							break
 					except urllib.error.URLError:
 						retries -= 1
@@ -178,32 +222,83 @@ class CardSelector:
 							break
 						time.sleep(10)
 				if retries == 0:
-					eFrame = Frame(self.cardFrame)
-					eL = Label(eFrame, text="Error getting data for page " + str(i))
-					eL.pack()
-					eL2 = Label(eFrame, text="Try again later maybe?")
-					eL2.pack()
-					eFrame.pack()
+					self.displayErrorMessage("Error getting data for " + type + " on page " + str(i),"Try again later maybe?")
 					self.root.title(self.title)
 					return
+				if currentPages > 1:
+					for i in range(2,currentPages+1):
+						retries = 10
+						while True:
+							try:
+								r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=i) + filter).read().decode()
+								if '<title>503' in r:
+									retries -= 1
+									if retries == 0:
+										break
+									time.sleep(10)
+								else:
+									foundThisPage = self.parseCardPage(r,type,currentTotal)
+									found.extend(foundThisPage)
+									currentTotal += len(foundThisPage)
+									break
+							except urllib.error.URLError:
+								retries -= 1
+								if retries == 0:
+									break
+								time.sleep(10)
+						if retries == 0:
+							self.displayErrorMessage("Error getting data for "+type+" on page " + str(i), "Try again later maybe?")
+							self.root.title(self.title)
+							return
+				if currentTotal >= total:
+					break
+			if currentTotal < total:
+				self.displayErrorMessage("Found less cards than expected.","Expected "+str(total)+", found "+str(currentTotal))
+				self.root.title(self.title)
+				return
+
 
 		for card in found:
 			card.display()
 
 		self.setUpCardFrame()
 		self.root.title(self.title)
+		#Forces the window to the front. Sometimes the deck window would jump in front.
+		self.root.attributes('-topmost', 1)
+		self.root.attributes('-topmost', 0)
 
-	def parseCardPage(self, rawCardList, pagenum=0):
+	def displayErrorMessage(self,line,line2=None):
+		"""
+		Displays an Error message on the CardSelector Screen
+
+		Args:
+		line	(String)				: The first line to write
+		line2	(String, default=None)	: The second line to write, or None to disable the second line
+
+		Returns: Nothing
+		"""
+		eFrame = Frame(self.cardFrame)
+		eL = Label(eFrame, text=line)
+		eL.pack()
+		if not line2 == None:
+			eL2 = Label(eFrame, text=line2)
+			eL2.pack()
+		eFrame.pack()
+
+	def parseCardPage(self, rawPage, cardType, startFrom=0):
 		"""
 		Parses a page's worth of cards, getting the data needed for a Card object.
 
 		Args:
-		rawCardList (String[])		: A list of strings, each containing the HTML that displays the card.
-		pagenum 	(int, default=0): The current page number, minus 1 to ake maths easier. This is used in CardDislay.
+		rawPage		(String)		: The raw HTML page
+		cardType	(String)		: The Type of card we're currently parsing. Passed onto the Card object
+		startFrom 	(int, default=0): The number to start from when assigning numbers to card. Used when displaying them later.
 
 		Returns: CardDisplay[]
 		A list of all the display objects for each card on this page.
 		"""
+		rawPage = rawPage.split('<ul class="cards-grid clear" id="cardResults">')[1].split("</ul>")[0]
+		rawCardList = rawPage.split("<li>")[1:]
 		found = []
 		for i, data in enumerate(rawCardList):
 			page = data.split('<a href="')[1].split('">')[0].split("/")
@@ -211,15 +306,20 @@ class CardSelector:
 			num = page[-2]
 			name = data.split('alt="')[1].split('">')[0].replace("-", " ")
 			image = "http:" + data.split('<img src="')[1].split('"')[0]
-			if name[-6:].upper() == " BREAK":
-				c = Card(name, set, num, image, "Pokemon", False, True)
-			elif name[:2].upper() == "M ":
-				c = Card(name, set, num, image, "Pokemon", True, False, True)
-			elif name[-3:].upper() == " EX":
-				c = Card(name, set, num, image, "Pokemon", True)
+			if cardType == "Pokemon":
+				if name[-6:].upper() == " BREAK":
+					c = Card(name, set, num, image, cardType, False, True)
+				elif name[:2].upper() == "M ":
+					c = Card(name, set, num, image, cardType, True, False, True)
+				elif name[-3:].upper() == " EX":
+					c = Card(name, set, num, image, cardType, True)
+				else:
+					c = Card(name, set, num, image, cardType)
+			elif cardType == "Special Energy":
+				c = Card(name, set, num, image, "Energy",False,False,False,True)
 			else:
-				c = Card(name, set, num, image, "Pokemon")
-			found.append(CardDisplay(self, c,i + (pagenum * 12)))
+				c = Card(name, set, num, image, cardType)
+			found.append(CardDisplay(self, c,i + startFrom))
 		return found
 
 	@staticmethod
@@ -332,19 +432,20 @@ class Card:
 			"g1":	"Generations",
 			"dc1":	"Double Crisis"}
 
-	def __init__(self,name,set,number,imageURL,cardType,isEX=False,isBreak=False,isMega=False):
+	def __init__(self,name,set,number,imageURL,cardType,isEX=False,isBreak=False,isMega=False,isSpecialEnergy=False):
 		"""
 		Builds a Card object
 
 		Args:
-		name 		(String)				: The name of the card
-		set 		(String)				: The set code, see Card.sets
-		number 		(String)				: The number. Must be a string to support special sets, like Radiant Collections (RC##)
-		imageURL 	(String)				: The image URL
-		cardType	(String)				: What type the card is (Pokemon, Item, Tool, Supporter, Stadium, Special Energy, Energy)
-		isEX 		(Boolean, default=False): Is the card an EX?
-		isBreak 	(Boolean, default=False): Is the card a BREAK Evolution? Used for rendering the card.
-		isMega 		(Boolean, default=False): Is the card a Mega Evolution?
+		name 			(String)				: The name of the card
+		set 			(String)				: The set code, see Card.sets
+		number 			(String)				: The number. Must be a string to support special sets, like Radiant Collections (RC##)
+		imageURL 		(String)				: The image URL
+		cardType		(String)				: What type the card is (Pokemon, Item, Tool, Supporter, Stadium, Special Energy, Energy)
+		isEX 			(Boolean, default=False): Is the card an EX?
+		isBreak 		(Boolean, default=False): Is the card a BREAK Evolution? Used for rendering the card.
+		isMega 			(Boolean, default=False): Is the card a Mega Evolution?
+		isSpecialEnergy	(Boolean, default=False): Is the energy special? Should only be checked if the cardType is Energy.
 
 		Returns: Nothing
 		"""
@@ -356,6 +457,7 @@ class Card:
 		self.isEX = isEX
 		self.isBreak = isBreak
 		self.isMega = isMega
+		self.isSpecialEnergy = isSpecialEnergy
 		self.image = None
 		self.cacheImage()
 
@@ -445,8 +547,8 @@ class CardDisplay:
 		name.pack()
 		self.num = num
 
-		pic.bind("<Double-Button-1>",lambda e,c=self.card: requestCardCount(c))
-		name.bind("<Double-Button-1>", lambda e, c=self.card: requestCardCount(c))
+		pic.bind("<Button-1>",lambda e,c=self.card: requestCardCount(c))
+		name.bind("<Button-1>", lambda e, c=self.card: requestCardCount(c))
 
 	def display(self):
 		"""
@@ -477,7 +579,6 @@ def requestDeleteCardFromDeck(deck):
 	"""
 	root = Toplevel()
 	sel = deck.selection()
-	print(repr(sel))
 	l = Label(root)
 	b1 = Button(root,height=2)
 	if sel == "":
@@ -495,7 +596,6 @@ def requestDeleteCardFromDeck(deck):
 			l.grid(row=0,column=0,columnspan=2)
 			b1.grid(row=1,column=0,sticky="ew")
 		except KeyError:
-			print(roots)
 			l.configure(text="Are you sure you want to delete all {section} cards?".format(section=roots.get(sel)))
 			b1.configure(text="Yes", command=lambda: deleteAllCardsFromSection(root, sel))
 			Button(root,text="No",height=2, command=root.destroy).grid(row=1, column=1,sticky="ew")
@@ -517,12 +617,14 @@ toolbarRoot.pack(fill="x")
 addCardB = Button(toolbarRoot,text="Add Card",width=10,height=2,command = lambda c=cardSelector:c.build())
 addCardB.pack(anchor="w",side=LEFT)
 
-Label(toolbarRoot,text="  # of Cards:").pack(anchor="w",side=LEFT)
+totalCardsLabel = Label(toolbarRoot,text="  # of Cards:")
+totalCardsLabel.pack(anchor="w",side=LEFT)
 
 totalCards = IntVar()
 totalCards.set(0)
 
-Label(toolbarRoot,textvariable=totalCards).pack(anchor="w",side=LEFT,padx=20)
+totalCardsLabelValue = Label(toolbarRoot,textvariable=totalCards)
+totalCardsLabelValue.pack(anchor="w",side=LEFT,padx=20)
 
 remCardB = Button(toolbarRoot,text="Remove Card",width=10,height=2)
 remCardB.pack(anchor="w",side=LEFT)
@@ -537,6 +639,8 @@ remCardB.configure(command = lambda d=deck: requestDeleteCardFromDeck(d))
 for k,v in headers.items():
 	deck.heading(k,text=v)
 
+deck.column("count",anchor=CENTER)
+
 deck.column("#0",width=90)
 deck.heading("#0",text="Type")
 
@@ -545,7 +649,7 @@ roots = external.TwoWay()
 roots.add("Pokemon", deck.insert("",END,text="Pokemon",open=True,values=["",0]))
 roots.add("Items", deck.insert("",END,text="Items",open=True,values=["",0]))
 roots.add("Tools", deck.insert("",END,text="Tools",open=True,values=["",0]))
-roots.add("Supporter", deck.insert("",END,text="Supporters",open=True,values=["",0]))
+roots.add("Supporters", deck.insert("",END,text="Supporters",open=True,values=["",0]))
 roots.add("Stadium", deck.insert("",END,text="Stadiums",open=True,values=["",0]))
 roots.add("Energy", deck.insert("",END,text="Energy",open=True,values=["",0]))
 
@@ -608,7 +712,7 @@ cardCountEntryValidateIfEnergy = (root.register(cardCountEntryValidateIfEnergy),
 def requestCardCount(card):
 	"""
 	Builds and displays a dialogue asking for the number of cards. Is called when a card is added,
-	but can also be called by double clicking a card in the Treeview
+	but can also be called by double clicking a card in the Treeview (TO BE IMPLEMENTED)
 
 	Args:
 	card (Card): The Card object containing the selected card's information.
@@ -619,13 +723,13 @@ def requestCardCount(card):
 	root = Toplevel()
 	Label(root,text="How many of {card} do you want?".format(card=card.name)).pack()
 	cardCountEntry = Entry(root,width=2,validate="key")
-	if card.type == "Energy":
+	if card.type == "Energy" and not card.isSpecialEnergy:
 		cardCountEntry.configure(validatecommand=cardCountEntryValidateIfEnergy)
 	else:
 		cardCountEntry.configure(validatecommand=cardCountEntryValidate)
 	cardCountEntry.focus_set()
 	cardCountEntry.pack(fill="x")
-	b = Button(root,text="Submit")
+	b = Button(root,text="Submit",height=4)
 	b.configure(command = lambda e=cardCountEntry,top=root: addCardToDeck(top,card,e.get()))
 	b.pack(fill="x")
 
@@ -683,7 +787,8 @@ def deleteAllCardsFromSection(top,id):
 
 def updateCardCounters(root):
 	"""
-	Updates the total card counter and section card counters
+	Updates the total card counter and section card counters.
+	Turns the total card counter red if there are > 60 cards in the deck
 
 	Args:
 	root (String): Either a Treeview ID or all. If an ID is provided, only that section will be updated.
@@ -711,6 +816,12 @@ def updateCardCounters(root):
 		deck.item(root, values=["", new])
 		delta = current - new
 		totalCards.set(totalCards.get()-delta)
+	if totalCards.get() > 60:
+		totalCardsLabel.configure(fg="#ff0000")
+		totalCardsLabelValue.configure(fg="#ff0000")
+	else:
+		totalCardsLabel.configure(fg="#000000")
+		totalCardsLabelValue.configure(fg="#000000")
 
 
 deck.pack()
