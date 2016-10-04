@@ -432,7 +432,6 @@ class Card:
 			"g1":	"Generations",
 			"dc1":	"Double Crisis"}
 
-	#def __init__(self,name,set,number,imageURL,cardType,isEX=False,isBreak=False,isMega=False,isSpecialEnergy=False):
 	def __init__(self,name,set,number,imageURL,cardType,**kwargs):
 		"""
 		Builds a Card object
@@ -610,6 +609,32 @@ def requestDeleteCardFromDeck(deck):
 			b1.grid(row=1, column=0,sticky="ew")
 
 
+def editCardCountInDeck(top,id,count):
+	top.destroy()
+	current = deck.item(id)["values"]
+	current[1] = count
+	deck.item(id,values = current)
+	updateCardCounters("all")
+
+
+def requestCardCountInDeck():
+	id = deck.focus()
+	card = deckItems[deck.focus()]
+	root = Toplevel()
+	Label(root,text="How many of {card} do you want?".format(card=card.name)).pack()
+	cardCountEntry = Entry(root,width=2,validate="key")
+	if card.type == "Energy" and not card.isSpecialEnergy:
+		cardCountEntry.configure(validatecommand=cardCountEntryValidateIfEnergy)
+	else:
+		cardCountEntry.configure(validatecommand=cardCountEntryValidate)
+	cardCountEntry.insert(0,deck.item(id,"values")[1])
+	cardCountEntry.focus_set()
+	cardCountEntry.pack(fill="x")
+	b = Button(root,text="Submit",height=4)
+	b.configure(command = lambda e=cardCountEntry,top=root: editCardCountInDeck(top,id,e.get()))
+	b.pack(fill="x")
+	cardCountEntry.bind("<Return>",lambda e,b=b:b.invoke())
+
 root = Tk()
 root.title("PTCGBuilder")
 
@@ -623,6 +648,9 @@ toolbarRoot.pack(fill="x")
 
 addCardB = Button(toolbarRoot,text="Add Card",width=10,height=2,command = lambda c=cardSelector:c.build())
 addCardB.pack(anchor="w",side=LEFT)
+
+changeCardCountButton = Button(toolbarRoot,text="Change Count",width=5,height=2,state=DISABLED,command=requestCardCountInDeck)
+changeCardCountButton.pack(anchor="w",side=LEFT)
 
 totalCardsLabel = Label(toolbarRoot,text="  # of Cards:")
 totalCardsLabel.pack(anchor="w",side=LEFT)
@@ -641,10 +669,23 @@ headers["name"]		= "Name"
 headers["count"]	= "Count"
 headers["setnum"]	= "Set/Number"
 
-deck = Treeview(deckRoot,height=25,columns=tuple(headers.keys()),show="tree headings")
+deckScrollbar = Scrollbar(deckRoot)
+
+deck = Treeview(deckRoot,height=25,columns=tuple(headers.keys()),show="tree headings",yscrollcommand=deckScrollbar.set)
+deckScrollbar.configure(command=deck.yview)
 remCardB.configure(command = lambda d=deck: requestDeleteCardFromDeck(d))
 for k,v in headers.items():
 	deck.heading(k,text=v)
+
+def toggleCountCheckButton(d,b):
+	current = d.focus()
+	if current == "" or current in roots.d.keys():
+		b.configure(state=DISABLED)
+	else:
+		b.configure(state=ACTIVE)
+
+
+deck.bind("<<TreeviewSelect>>",lambda _,d=deck,b=changeCardCountButton:toggleCountCheckButton(d,b))
 
 deck.column("count",anchor=CENTER)
 
@@ -719,14 +760,13 @@ cardCountEntryValidateIfEnergy = (root.register(cardCountEntryValidateIfEnergy),
 def requestCardCount(card):
 	"""
 	Builds and displays a dialogue asking for the number of cards. Is called when a card is added,
-	but can also be called by double clicking a card in the Treeview (TO BE IMPLEMENTED)
+	but can also be called by selecting a card and pressing "Change Count"
 
 	Args:
 	card (Card): The Card object containing the selected card's information.
 
 	Returns: Nothing
 	"""
-	global cardCountEntry
 	root = Toplevel()
 	Label(root,text="How many of {card} do you want?".format(card=card.name)).pack()
 	cardCountEntry = Entry(root,width=2,validate="key")
@@ -832,6 +872,6 @@ def updateCardCounters(root):
 		totalCardsLabelValue.configure(fg="#000000")
 
 
-deck.pack()
-
+deck.pack(side=LEFT,fill="x")
+deckScrollbar.pack(side=RIGHT,fill="y")
 root.mainloop()
