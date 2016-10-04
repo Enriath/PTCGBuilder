@@ -5,6 +5,13 @@ from io import BytesIO
 import re
 import time
 import platform
+import sys
+
+if sys.version_info < (3,4):
+	from HTMLParser import HTMLParser
+	html = HTMLParser()
+else:
+	import html
 
 from collections import OrderedDict
 
@@ -53,24 +60,30 @@ class CardSelector:
 		searchEntry = Entry(searchFrame)
 		searchEntry.grid(row=0, column=0, sticky="ew")
 		searchEntry.focus_set()
-		searchButton = Button(searchFrame, text="Search Card",
-							  command=lambda searchEntry=searchEntry: self.searchForCardsByName(searchEntry.get()))
+		searchButton = Button(searchFrame, text="Search Card")
 		searchButton.grid(row=0, column=1)
 		self.root.bind("<Return>", lambda x, searchButton=searchButton: searchButton.invoke())
 		searchEntry.bind("<Control-BackSpace>", lambda x, searchEntry=searchEntry: self.deleteOneWord(searchEntry))
 		columnsLabel = Label(searchFrame, text="Columns: ")
-		columnsLabel.grid(row=0, column=2)
+		columnsLabel.grid(row=0, column=4)
 		self.columnsEntry = Entry(searchFrame, width=3, validate="key")
 		self.columnsEntry.configure(validatecommand=self.rowAndColEntryValidate)
-		self.columnsEntry.grid(row=0, column=3)
+		self.columnsEntry.grid(row=0, column=5)
 		self.columnsEntry.insert(0, "3")
 		rowsLabel = Label(searchFrame, text="Rows: ")
-		rowsLabel.grid(row=0, column=4)
+		rowsLabel.grid(row=0, column=6)
 		self.rowsEntry = Entry(searchFrame, width=3, validate="key")
 		self.rowsEntry.configure(validatecommand=self.rowAndColEntryValidate)
-		self.rowsEntry.grid(row=0, column=5)
+		self.rowsEntry.grid(row=0, column=7)
 		self.rowsEntry.insert(0, "2")
 
+		selectedType = StringVar()
+		selectedType.set("All")
+		Label(searchFrame,text="Search For:").grid(row=0,column=2)
+		self.typeSelector = OptionMenu(searchFrame,selectedType,"All","Pokemon","Items","Tools","Supporters","Stadiums","Special Energy","Energy")
+		self.typeSelector.grid(row=0,column=3)
+
+		searchButton.configure(command=lambda searchEntry=searchEntry,selType=selectedType: self.searchForCardsByName(searchEntry.get(),selType.get()))
 		self.cardRoot = Frame(self.root)
 		self.cardRoot.pack(fill="both")
 		scrollbar = external.AutoScrollbar(self.cardRoot)
@@ -99,13 +112,14 @@ class CardSelector:
 			self.root.bind_all("<Button-4>", lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(-1 * (e.delta / 120)), "units"))
 			self.root.bind_all("<Button-5>", lambda e, canvas=self.scrollbarProxy: canvas.yview_scroll(int(e.delta / 120), "units"))
 
-	def searchForCardsByName(self,n):
+	def searchForCardsByName(self,n,type):
 		"""
 		Searches for a card by a given name, including EX, BREAK, and Mega pokemon.
 		Function also displays the Cards in the Card Frame
 
 		Args:
-		n (String): Part of or whole name of a Card.
+		n		(String): Part of or whole name of a Card.
+		type	(String): What type of card to search for.
 
 		Returns:Nothing
 		"""
@@ -126,9 +140,14 @@ class CardSelector:
 		if n[-3:].upper() == " EX" or n.upper() == "EX":
 			extra += CardSelector.isEX
 			n = n[:-3]
+
+		#If we're only searching for a single type, only get that type to begin with
+		typeSearch = ""
+		if not type == "All":
+			typeSearch += CardSelector.typeFilters[type]
 		try:
 			n = n.replace(" ","+")
-			r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=1) + extra).read().decode()
+			r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=1) + extra + typeSearch).read().decode()
 		except urllib.error.URLError:
 			self.displayErrorMessage("No Internet/Pokemon.com is blocked")
 			self.root.title(self.title)
@@ -149,9 +168,8 @@ class CardSelector:
 			pages = int(pages[match.start():match.end()].split(" ")[-1])
 		else:
 			pages = 1
-
 		#EX, Mega, and BREAKs only have pokemon, so might as well use old version for them.
-		if not extra == "":
+		if not extra == "" and (type == "All" or type == "Pokemon"):
 			found = []
 			found.extend(self.parseCardPage(r,"Pokemon"))
 			if pages > 1:
@@ -181,7 +199,7 @@ class CardSelector:
 						return
 		else:
 			try:
-				r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=pages)).read().decode()
+				r = self.opener.open(CardSelector.baseurl.format(name=n, pagenum=pages) + typeSearch).read().decode()
 			except urllib.error.URLError:
 				self.displayErrorMessage("No Internet/Pokemon.com is blocked")
 				self.root.title(self.title)
@@ -191,7 +209,13 @@ class CardSelector:
 			total = ((pages-1)*12) + len(rawCardList)
 			found = []
 			currentTotal = 0
-			for type,filter in CardSelector.typeFilters.items():
+			filterList = CardSelector.typeFilters
+			if not type == "All":
+				filterList = [(type,filterList[type])]
+			else:
+				filterList = filterList.items()
+			print(filterList)
+			for type,filter in filterList:
 				#Get # of pages of current type
 				currentPages = 0
 				retries = 10
@@ -451,7 +475,7 @@ class Card:
 
 		Returns: Nothing
 		"""
-		self.name = name
+		self.name = html.unescape(name)
 		self.set = set
 		self.number = number
 		self.imageURL = imageURL
@@ -490,6 +514,8 @@ class Card:
 		"""
 		i = self.getCardImage()
 		if self.isBreak:
+			if i.height > i.width:
+				i = i.rotate(-90,0,1)
 			i.thumbnail((245, 245), Image.ANTIALIAS)
 		self.image = i
 
@@ -649,7 +675,7 @@ toolbarRoot.pack(fill="x")
 addCardB = Button(toolbarRoot,text="Add Card",width=10,height=2,command = lambda c=cardSelector:c.build())
 addCardB.pack(anchor="w",side=LEFT)
 
-changeCardCountButton = Button(toolbarRoot,text="Change Count",width=5,height=2,state=DISABLED,command=requestCardCountInDeck)
+changeCardCountButton = Button(toolbarRoot,text="Change Count",width=12,height=2,state=DISABLED,command=requestCardCountInDeck)
 changeCardCountButton.pack(anchor="w",side=LEFT)
 
 totalCardsLabel = Label(toolbarRoot,text="  # of Cards:")
