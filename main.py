@@ -724,7 +724,7 @@ roots.add("Pokemon", deck.insert("",END,text="Pokemon",open=True,values=["",0]))
 roots.add("Items", deck.insert("",END,text="Items",open=True,values=["",0]))
 roots.add("Tools", deck.insert("",END,text="Tools",open=True,values=["",0]))
 roots.add("Supporters", deck.insert("",END,text="Supporters",open=True,values=["",0]))
-roots.add("Stadium", deck.insert("",END,text="Stadiums",open=True,values=["",0]))
+roots.add("Stadiums", deck.insert("",END,text="Stadiums",open=True,values=["",0]))
 roots.add("Energy", deck.insert("",END,text="Energy",open=True,values=["",0]))
 
 deckItems = {}
