@@ -12,11 +12,10 @@ A Pokemon TCG Deck Builder, built in Python!
 ###What it will do:
 
 * Allow building of decks, with useful breakdowns, such as rarity, set, and card type.
-* Allow for managing of multiple decks.
 
 ###Current issues:
 
-* Missing Promo Cards from #102 onwards [(see this issue for more information)](https://github.com/Hydrox6/PTCGBuilder/issues/4).
+* Missing Saving
 
 ###Feel free to suggest features in the [Issues](https://github.com/Hydrox6/PTCGBuilder/issues) tab.
 
