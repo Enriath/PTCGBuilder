@@ -898,6 +898,20 @@ def updateCardCounters(root):
 		totalCardsLabelValue.configure(fg="#000000")
 
 
+def displaySaveDialogue():
+	top = Toplevel()
+	savediag = Frame(top)
+	savediag.pack()
+	Label(savediag,text="Choose your save method:").grid(row=0,column=0,columnspan=999)
+	Button(savediag,text="Raw",width=5,height=2).grid(row=1,column=0)
+	Button(savediag, text="Fancy", width=7, height=2).grid(row=1, column=1)
+	Button(savediag, text="Reddit", width=8, height=2).grid(row=1, column=2)
+	Button(savediag, text="File", width=6, height=2).grid(row=1, column=3)
+
+saveButton = Button(toolbarRoot,text="Save",width=6,height=2,command=displaySaveDialogue)
+saveButton.pack(anchor="e",side=RIGHT)
+
+
 deck.pack(side=LEFT,fill="x")
 deckScrollbar.pack(side=RIGHT,fill="y")
 root.mainloop()
